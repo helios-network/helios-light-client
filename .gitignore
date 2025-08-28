@@ -1,0 +1,35 @@
+# Rust
+/target
+**/*.rs.bk
+*.profraw
+*.profdata
+*.gcno
+*.gcda
+*.lcov
+coverage/
+target/llvm-cov/
+
+# Logs
+*.log
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Editor / IDE files
+.vscode/
+.idea/
+*.iml
+*.code-workspace
+
+# Environment variables
+.env.*
+!.env.example
+
+# Docker
+.docker/
+
+# Temporary caches
+.cache/
+tmp/
+temp/

@@ -1,0 +1,90 @@
+services:
+  helios-light-client:
+    build:
+      context: .
+    image: helios-light-client:latest
+    environment:
+      # Required envs (must be provided)
+      - CHAIN_ID
+      - PRIMARY
+      - WITNESSES
+      - TRUSTED_HEIGHT
+      - TRUSTED_HASH
+      # Optional envs
+      - LISTEN_ADDR
+      - TRUST_THRESHOLD
+      - TRUSTING_PERIOD
+      - MAX_CLOCK_DRIFT
+      - MAX_BLOCK_LAG
+      - FRESHNESS_THRESHOLD
+      - KEEP_WARM_INTERVAL
+      - HALT_DURATION_ON_FORK
+      - API_TIMEOUT
+      - VERBOSE
+    command: |
+      sh -c '
+        set -e
+        : "${CHAIN_ID?missing CHAIN_ID}"
+        : "${PRIMARY?missing PRIMARY}"
+        : "${WITNESSES?missing WITNESSES}"
+        : "${TRUSTED_HEIGHT?missing TRUSTED_HEIGHT}"
+        : "${TRUSTED_HASH?missing TRUSTED_HASH}"
+
+        set -- \
+          --chain-id "$$CHAIN_ID" \
+          --primary "$$PRIMARY" \
+          --witnesses "$$WITNESSES" \
+          --trusted-height "$$TRUSTED_HEIGHT" \
+          --trusted-hash "$$TRUSTED_HASH"
+
+        [ -n "$$LISTEN_ADDR" ] && set -- "$$@" --listen-addr "$$LISTEN_ADDR"
+        [ -n "$$TRUST_THRESHOLD" ] && set -- "$$@" --trust-threshold "$$TRUST_THRESHOLD"
+        [ -n "$$TRUSTING_PERIOD" ] && set -- "$$@" --trusting-period "$$TRUSTING_PERIOD"
+        [ -n "$$MAX_CLOCK_DRIFT" ] && set -- "$$@" --max-clock-drift "$$MAX_CLOCK_DRIFT"
+        [ -n "$$MAX_BLOCK_LAG" ] && set -- "$$@" --max-block-lag "$$MAX_BLOCK_LAG"
+        [ -n "$$FRESHNESS_THRESHOLD" ] && set -- "$$@" --freshness-threshold "$$FRESHNESS_THRESHOLD"
+        [ -n "$$KEEP_WARM_INTERVAL" ] && set -- "$$@" --keep-warm-interval "$$KEEP_WARM_INTERVAL"
+        [ -n "$$HALT_DURATION_ON_FORK" ] && set -- "$$@" --halt-duration-on-fork "$$HALT_DURATION_ON_FORK"
+        [ -n "$$API_TIMEOUT" ] && set -- "$$@" --api-timeout "$$API_TIMEOUT"
+
+        if [ -n "$$VERBOSE" ]; then
+          set -- "$$@" "-$$VERBOSE"
+        fi
+
+        exec helios-light-client "$$@"
+      '
+    networks:
+      - appnet
+
+  consumer-app:
+    image: alpine:3.20
+    depends_on:
+      - helios-light-client
+    command: |
+      sh -c '
+        set -e
+        apk add --no-cache curl jq >/dev/null
+        API_URL="http://helios-light-client:8080/v1/status"
+        INTERVAL="10"
+        # Wait for the API to be ready (HTTP 200) to avoid initial errors
+        for i in 1 2 3 4 5; do
+          if curl -sf "$$API_URL" >/dev/null; then break; fi
+          sleep 5
+        done
+        while true; do
+          if RESP=$(curl -sf "$$API_URL"); then
+            HEIGHT=$(echo "$$RESP" | jq -r .block_height)
+            HASH=$(echo "$$RESP" | jq -r .block_hash)
+            TIME=$(echo "$$RESP" | jq -r .block_timestamp)
+            echo "Successfully fetched status height=$$HEIGHT hash=$$HASH time=$$TIME"
+          else
+            echo "Error while fetching status"
+          fi
+          sleep "$$INTERVAL"
+        done
+      '
+    networks:
+      - appnet
+
+networks:
+  appnet:
